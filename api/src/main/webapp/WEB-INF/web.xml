@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <web-app version="2.5" xmlns="http://java.sun.com/xml/ns/javaee">
     <servlet>
-        <servlet-name>SystemServiceServlet</servlet-name>
-        <servlet-class>com.google.api.server.spi.SystemServiceServlet</servlet-class>
+        <servlet-name>EndpointsServlet</servlet-name>
+        <servlet-class>com.google.api.server.spi.EndpointsServlet</servlet-class>
+
         <init-param>
             <param-name>services</param-name>
             <!-- order of classes makes a difference.  The first one becomes the default version
                 for the Android endpoint -->
-            <param-value>net.mceoin.cominghome.api.StatusEndpointV2,
-                net.mceoin.cominghome.api.StatusEndpointV1</param-value>
+            <param-value>net.mceoin.cominghome.api.StatusEndpointV2</param-value>
         </init-param>
     </servlet>
     <servlet-mapping>
-        <servlet-name>SystemServiceServlet</servlet-name>
-        <url-pattern>/_ah/spi/*</url-pattern>
+        <servlet-name>EndpointsServlet</servlet-name>
+        <url-pattern>/_ah/api/*</url-pattern>
     </servlet-mapping>
 
     <servlet>

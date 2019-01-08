@@ -19,9 +19,10 @@ import com.google.api.server.spi.config.AnnotationBoolean;
 import com.google.api.server.spi.config.Api;
 import com.google.api.server.spi.config.ApiMethod;
 import com.google.api.server.spi.config.ApiNamespace;
-import com.google.api.server.spi.config.Named;
 
 import java.util.logging.Logger;
+
+import javax.inject.Named;
 
 /**
  * Cloud Endpoint to allow the backend to track away/home status for each Android
@@ -31,16 +32,15 @@ import java.util.logging.Logger;
  * <p/>
  * One way to test using curl is like so:
  * <pre>
- * curl --header "Content-length: 0" -X POST https://coming-home-testing-840.appspot.com/_ah/api/myApi/v2/arrivedHome/testinstall/testaccess/teststruct/false/false/dude/1234
+ * curl --header "Content-length: 0" -X POST https://coming-home-testing-840.appspot.com/_ah/api/myApi/v2/arrivedHome/testinstall/testaccess/none/false/1234
  * </pre>
  */
-@Api(name = "myApi", version = "v2",
-        defaultVersion = AnnotationBoolean.TRUE,
-        description = "API to tell backend user arrived or left home",
+@Api(name = "myApi", version = "v1", description = "Original API",
+        defaultVersion = AnnotationBoolean.FALSE,
         namespace = @ApiNamespace(ownerDomain = "api.cominghome.mceoin.net", ownerName = "api.cominghome.mceoin.net", packagePath = ""))
-public class StatusEndpointV2 extends StatusEndpoint {
+public class StatusEndpointV1 extends StatusEndpoint {
 
-    private static final Logger log = Logger.getLogger(StatusEndpointV2.class.getName());
+    private static final Logger log = Logger.getLogger(StatusEndpointV1.class.getName());
 
     /**
      * Let the backend know that user has arrived home.  If set, let Nest know as well.
@@ -49,16 +49,13 @@ public class StatusEndpointV2 extends StatusEndpoint {
      * @param access_token   Token to be used to allow access to Nest
      * @param structure_id   Nest id for the structure where the thermostat is located
      * @param tell_nest      Whether or not to let Nest know
-     * @return {@link StatusBean} Outcome of the update
+     * @return {@link net.mceoin.cominghome.api.StatusBean} Outcome of the update
      */
     @ApiMethod(name = "arrivedHome")
     public StatusBean arrivedHome(@Named("InstallationID") String InstallationID,
                                   @Named("access_token") String access_token,
                                   @Named("structure_id") String structure_id,
-                                  @Named("tell_nest") boolean tell_nest,
-                                  @Named("tell_others") boolean tell_others,
-                                  @Named("my_name") String my_name,
-                                  @Named("Gcm_reg_id") String Gcm_reg_id) {
+                                  @Named("tell_nest") boolean tell_nest) {
         StatusBean response = new StatusBean();
 
         response.setSuccess(true);
@@ -83,71 +80,48 @@ public class StatusEndpointV2 extends StatusEndpoint {
             return response;
         }
 
-        if (Gcm_reg_id.isEmpty()) {
-            response.setSuccess(false);
-            response.setMessage("Gcm_reg_id is empty");
-            return response;
-        }
-
-        saveStatus(InstallationID, structure_id, "home", Gcm_reg_id);
+        saveStatus(InstallationID, structure_id, "home");
 
         if (tell_nest) {
             String nest_away = NestUtil.getNestAwayStatus(access_token, structure_id);
-            if (nest_away.equals("home")) {
-                // if we're already home, don't bother updating Nest
-                response.setNestSuccess(true);
-                response.setNestUpdated(false);
-                response.setMessage("Nest already home");
-            } else {
-                // if we're not at home, update Nest
-                String result = NestUtil.tellNestAwayStatus(access_token, structure_id, "home");
-                response.setMessage("Nest updated");
-                if (result.equals("Success")) {
+            switch (nest_away) {
+                case "away":
+                case "auto-away":
+                    String result = NestUtil.tellNestAwayStatus(access_token, structure_id, "home");
+                    response.setMessage("Nest updated");
+                    if (result.equals("Success")) {
+                        response.setNestSuccess(true);
+                        response.setNestUpdated(true);
+                    } else {
+                        response.setNestSuccess(false);
+                        response.setNestUpdated(false);
+                        response.setMessage(result);
+                    }
+                    break;
+                case "home":
                     response.setNestSuccess(true);
-                    response.setNestUpdated(true);
-                } else {
+                    response.setNestUpdated(false);
+                    response.setMessage("Nest already home");
+                    break;
+                default:
                     response.setNestSuccess(false);
                     response.setNestUpdated(false);
-                    response.setMessage(result);
-                }
+                    response.setMessage(nest_away);
+                    break;
             }
         } else {
             response.setNestSuccess(true);
             response.setNestUpdated(false);
             response.setMessage("Backend was updated");
         }
-        if (response.isNestSuccess()) {
-            log.info("response message=" + response.getMessage() + " for " + InstallationID);
-        } else {
-            log.warning("response message=" + response.getMessage() + " for " + InstallationID);
-        }
         return response;
     }
 
-    /**
-     * Let the backend know that the user has left home.
-     *
-     * @param InstallationID Unique identifier for device sending the message
-     * @param access_token   Token to be used to allow access to Nest
-     * @param structure_id   Nest id for the structure where the thermostat is located
-     * @param tell_nest      Whether or not to let Nest know
-     * @param tell_others    Let others associated with the same structure know
-     * @param my_name        Name to use when telling others
-     * @param Gcm_reg_id     GCM registration id
-     * @return {@link StatusBean} Outcome of the update
-     *
-     *  <pre>
-     * curl --header "Content-length: 0" -X POST https://coming-home-testing-840.appspot.com/_ah/api/myApi/v2/leftHome/testinstall/testaccess/teststruct/false/false/dude/1234
-     * </pre>
-     */
     @ApiMethod(name = "leftHome")
     public StatusBean leftHome(@Named("InstallationID") String InstallationID,
                                @Named("access_token") String access_token,
                                @Named("structure_id") String structure_id,
-                               @Named("tell_nest") boolean tell_nest,
-                               @Named("tell_others") boolean tell_others,
-                               @Named("my_name") String my_name,
-                               @Named("Gcm_reg_id") String Gcm_reg_id) {
+                               @Named("tell_nest") boolean tell_nest) {
         StatusBean response = new StatusBean();
 
         response.setSuccess(true);
@@ -172,13 +146,7 @@ public class StatusEndpointV2 extends StatusEndpoint {
             return response;
         }
 
-        if (Gcm_reg_id.isEmpty()) {
-            response.setSuccess(false);
-            response.setMessage("Gcm_reg_id is empty");
-            return response;
-        }
-
-        saveStatus(InstallationID, structure_id, "away", Gcm_reg_id);
+        saveStatus(InstallationID, structure_id, "away");
 
         boolean others = checkOthersAtHome(InstallationID, structure_id);
         response.setOthersAtHome(others);
@@ -190,32 +158,34 @@ public class StatusEndpointV2 extends StatusEndpoint {
         } else if (tell_nest) {
             String nest_away = NestUtil.getNestAwayStatus(access_token, structure_id);
 
-            if (nest_away.equals("away") || nest_away.equals("auto-away")) {
-                // if Nest is already away, don't bother updating
-                response.setNestSuccess(true);
-                response.setNestUpdated(false);
-                response.setMessage("Nest already " + nest_away);
-            } else {
-                // if Nest is not away, then update to away
-                String result = NestUtil.tellNestAwayStatus(access_token, structure_id, "away");
-                response.setMessage("Nest updated");
-                if (result.equals("Success")) {
+            switch (nest_away) {
+                case "home":
+                    String result = NestUtil.tellNestAwayStatus(access_token, structure_id, "away");
+                    response.setMessage("Nest updated");
+                    if (result.equals("Success")) {
+                        response.setNestSuccess(true);
+                        response.setNestUpdated(true);
+                    } else {
+                        response.setNestSuccess(false);
+                        response.setMessage(result);
+                    }
+                    break;
+                case "away":
+                case "auto-away":
                     response.setNestSuccess(true);
-                    response.setNestUpdated(true);
-                } else {
+                    response.setNestUpdated(false);
+                    response.setMessage("Nest already " + nest_away);
+                    break;
+                default:
                     response.setNestSuccess(false);
-                    response.setMessage(result);
-                }
+                    response.setNestUpdated(false);
+                    response.setMessage(nest_away);
+                    break;
             }
         } else {
             response.setNestSuccess(true);
             response.setNestUpdated(false);
             response.setMessage("Backend was updated");
-        }
-        if (response.isNestSuccess()) {
-            log.info("response message=" + response.getMessage() + " for " + InstallationID);
-        } else {
-            log.warning("response message=" + response.getMessage() + " for " + InstallationID);
         }
         return response;
     }

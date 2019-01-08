@@ -15,7 +15,7 @@
  */
 package net.mceoin.cominghome.api;
 
-import com.google.appengine.repackaged.org.codehaus.jackson.map.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
